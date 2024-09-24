@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Z-Score Graph</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <h1>Z-Score Graph</h1>
+
+    <label for="sequence">Request Sequence per Day (each value is an hour of the day, 24 in total):</label><br>
+    <textarea id="sequence" rows="4" cols="50">10,9,8,7,6,5,4,5,6,7,8,9,10,11,12,13,14,15,16,15,14,13,12,11</textarea><br><br>
+ <label for="suffix">Last Hours Sequence (optional):</label><br>
+    <textarea id="suffix" rows="2" cols="50"></textarea><br><br>
+
+    <button onclick="plotZScoreGraph()">Plot Z-Score Graph</button>
+
+    <h2>Graph:</h2>
+    <canvas id="zScoreChart" width="400" height="120"></canvas>
+
+    <script>
+        function calculateZScore(data, currentHourValue) {
+            const n = data.length;
+
+            // Calculate the mean
+            const mean = data.reduce((sum, value) => sum + value, 0) / n;
+
+            // Calculate the standard deviation
+            const variance = data.reduce((sum, value) => sum + Math.pow(value - mean, 2), 0) / n;
+            const standardDeviation = Math.sqrt(variance);
+
+            // Calculate the z-score
+            const zScore = (currentHourValue - mean) / standardDeviation;
+            return { zScore, mean, standardDeviation };
+        }
+
+        function plotZScoreGraph() {
+            // Get sequence from user input
+            const sequenceInput = document.getElementById('sequence').value;
+            const sequenceArray = sequenceInput.split(',').map(Number);
+
+            // Get suffix sequence from user input
+            const suffixInput = document.getElementById('suffix').value;
+            const suffixArray = suffixInput[0] ? suffixInput.split(',').map(Number) : [];
+
+            // Repeat the sequence for 7 days
+            const repeatedTimeline = Array(7).fill(sequenceArray).flat();
+
+// Replace the last elements of the repeated timeline with the suffix sequence
+            repeatedTimeline.splice(-suffixArray.length, suffixArray.length, ...suffixArray);
+
+
+            // Find the maximum value in the sequence
+            const maxValue = Math.max(...sequenceArray);
+
+            // Prepare data for the graph
+            const currentValues = Array.from({ length: maxValue + 1 }, (_, i) => i); // Current values from 0 to maxValue
+            const zScores = currentValues.map(value => {
+                const result = calculateZScore(repeatedTimeline, value);
+                return result.zScore;
+            });
+
+            // Plot the graph using Chart.js
+            const ctx = document.getElementById('zScoreChart').getContext('2d');
+            if (window.zScoreChart.destroy) {
+                window.zScoreChart.destroy(); // Destroy existing chart before creating a new one
+            }
+
+            window.zScoreChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: currentValues,
+                    datasets: [{
+                        label: 'Z-Score',
+                        data: zScores,
+                        borderColor: 'rgba(75, 192, 192, 1)',
+                        backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                        fill: false,
+                        tension: 0.1
+                    }]
+                },
+                options: {
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Current Hour Value'
+                            },
+                            min: 0,
+                            max: maxValue // Set the max value on the x-axis to be the max value of the sequence
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Z-Score'
+                            },
+                            min: -2.5,
+                            max: 2.5
+                        }
+                    },
+                    plugins: {
+                        annotation: {
+                            annotations: {
+                                line1: {
+                                    type: 'line',
+                                    yMin: -2,
+                                    yMax: -2,
+                                    borderColor: 'red',
+                                    borderWidth: 2,
+                                    label: {
+                                        content: 'Threshold: -2',
+                                        enabled: true,
+                                        position: 'end'
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                plugins: [ChartAnnotationPlugin] // Load the annotation plugin
+            });
+        }
+
+        // Load the Chart.js annotation plugin
+        const ChartAnnotationPlugin = {
+            id: 'annotation',
+            afterDraw: function(chart) {
+                const yScale = chart.scales.y;
+                const ctx = chart.ctx;
+                const yValue = yScale.getPixelForValue(-2);
+
+                // Draw the line at y = -2
+                ctx.save();
+                ctx.beginPath();
+                ctx.moveTo(chart.chartArea.left, yValue);
+                ctx.lineTo(chart.chartArea.right, yValue);
+                ctx.strokeStyle = 'red';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                ctx.restore();
+
+                // Add the label
+                ctx.fillStyle = 'red';
+                ctx.fillText('Threshold: -2', chart.chartArea.right - 80, yValue - 5);
+            }
+        };
+    </script>
+</body>
+</html>
